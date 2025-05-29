@@ -14,10 +14,17 @@ dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
+
+const allowedOrigins = [
+  'https://employee-feedback-theta.vercel.app',
+  'http://localhost:3000'
+];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: 'https://employee-feedback-theta.vercel.app',
-    methods: ['GET', 'POST']
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    credentials: true
   }
 });
 
@@ -27,15 +34,26 @@ const ADMIN_PASSWORD = '12345678'; // hashed "12345678"
 
 // Middleware
 app.use(cors({
-  origin: 'https://employee-feedback-theta.vercel.app',
-  methods: ['GET', 'POST', 'PATCH', 'DELETE']
+  origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  credentials: true
 }));
 app.use(express.json());
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://kritikjambusariya:BL01utiEaK0ff8Qh@employee.wa4jscz.mongodb.net/employee-feedback')
   .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    // Log more details about the error
+    if (err.name === 'MongoServerError') {
+      console.error('MongoDB Server Error Details:', {
+        code: err.code,
+        codeName: err.codeName,
+        message: err.message
+      });
+    }
+  });
 
 // Socket.IO Connection
 io.on('connection', (socket) => {
@@ -62,24 +80,38 @@ app.post('/api/auth/login', async (req, res) => {
 // Submit feedback (public route)
 app.post('/api/feedback', async (req, res) => {
   try {
+    console.log('Received feedback request:', req.body);
     const feedback = new Feedback(req.body);
+    console.log('Created feedback object:', feedback);
     await feedback.save();
+    console.log('Feedback saved successfully');
     io.emit('newFeedback', feedback);
     res.status(201).json(feedback);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Error in feedback submission:', error);
+    res.status(400).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 });
 
 // Protected Admin Routes
 app.get('/api/feedback', auth, async (req, res) => {
   try {
+    console.log('Received feedback list request');
     const { category } = req.query;
     const query = category ? { category } : {};
+    console.log('Query:', query);
     const feedback = await Feedback.find(query).sort({ createdAt: -1 });
+    console.log(`Found ${feedback.length} feedback items`);
     res.json(feedback);
   } catch (error) {
-    res.status(500).json({ error: error });
+    console.error('Error fetching feedback:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 });
 
@@ -111,6 +143,15 @@ app.delete('/api/feedback/:id', auth, async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+});
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
 const PORT = process.env.PORT || 5000;
