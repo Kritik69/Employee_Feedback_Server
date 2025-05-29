@@ -16,7 +16,7 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: 'https://employee-feedback-theta.vercel.app/',
+    origin: 'https://employee-feedback-theta.vercel.app',
     methods: ['GET', 'POST']
   }
 });
@@ -26,7 +26,10 @@ const ADMIN_EMAIL = 'kritikjambusariya@gmail.com';
 const ADMIN_PASSWORD = '12345678'; // hashed "12345678"
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'https://employee-feedback-theta.vercel.app',
+  methods: ['GET', 'POST', 'PATCH', 'DELETE']
+}));
 app.use(express.json());
 
 // MongoDB Connection
