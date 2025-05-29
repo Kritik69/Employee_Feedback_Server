@@ -1,7 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
@@ -9,8 +8,6 @@ const bcrypt = require('bcryptjs');
 
 const Feedback = require('./models/Feedback');
 const { auth, JWT_SECRET } = require('./middleware/auth');
-
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
@@ -41,7 +38,7 @@ app.use(cors({
 app.use(express.json());
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://kritikjambusariya:BL01utiEaK0ff8Qh@employee.wa4jscz.mongodb.net/employee-feedback')
+mongoose.connect('mongodb+srv://kritikjambusariya:BL01utiEaK0ff8Qh@employee.wa4jscz.mongodb.net/employee-feedback')
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => {
     console.error('MongoDB connection error:', err);
@@ -80,18 +77,42 @@ app.post('/api/auth/login', async (req, res) => {
 // Submit feedback (public route)
 app.post('/api/feedback', async (req, res) => {
   try {
-    console.log('Received feedback request:', req.body);
-    const feedback = new Feedback(req.body);
-    console.log('Created feedback object:', feedback);
+    const { text, category } = req.body;
+    
+    // Validate required fields
+    if (!text || !category) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        details: {
+          text: !text ? 'Text is required' : null,
+          category: !category ? 'Category is required' : null
+        }
+      });
+    }
+
+    // Validate category
+    const validCategories = ['Work Environment', 'Leadership', 'Growth', 'Others'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ 
+        error: 'Invalid category',
+        details: `Category must be one of: ${validCategories.join(', ')}`
+      });
+    }
+
+    const feedback = new Feedback({
+      text,
+      category,
+      reviewed: false
+    });
+
     await feedback.save();
-    console.log('Feedback saved successfully');
     io.emit('newFeedback', feedback);
     res.status(201).json(feedback);
   } catch (error) {
     console.error('Error in feedback submission:', error);
     res.status(400).json({ 
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error : undefined
+      error: 'Failed to submit feedback',
+      details: error.message
     });
   }
 });
@@ -99,18 +120,25 @@ app.post('/api/feedback', async (req, res) => {
 // Protected Admin Routes
 app.get('/api/feedback', auth, async (req, res) => {
   try {
-    console.log('Received feedback list request');
     const { category } = req.query;
-    const query = category ? { category } : {};
-    console.log('Query:', query);
-    const feedback = await Feedback.find(query).sort({ createdAt: -1 });
+    let query = {};
+    
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    const feedback = await Feedback.find(query)
+      .sort({ createdAt: -1 })
+      .select('text category reviewed createdAt') // Explicitly select fields
+      .lean(); // Convert to plain JS objects for better performance
+
     console.log(`Found ${feedback.length} feedback items`);
     res.json(feedback);
   } catch (error) {
     console.error('Error fetching feedback:', error);
     res.status(500).json({ 
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error : undefined
+      error: 'Failed to fetch feedback',
+      details: error.message
     });
   }
 });
@@ -150,11 +178,11 @@ app.use((err, req, res, next) => {
   console.error('Error:', err);
   res.status(500).json({ 
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    message: err.message // Always show error message for debugging
   });
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 
