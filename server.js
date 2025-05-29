@@ -79,7 +79,7 @@ app.get('/api/feedback', auth, async (req, res) => {
     const feedback = await Feedback.find(query).sort({ createdAt: -1 });
     res.json(feedback);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error });
   }
 });
 
