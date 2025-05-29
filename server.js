@@ -182,7 +182,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = 5000;
+const PORT = 8080;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 
